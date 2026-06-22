@@ -1,14 +1,15 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status, Response
 from sqlalchemy.orm import Session
 from typing import List
 from app.core.database import get_db
-from app.models.task import Task
 from app.schemas.task import TaskCreate, TaskUpdate, TaskResponse
+from app.services.task_service import TaskService
 
 router = APIRouter(
     prefix="/tasks",
     tags=["Tasks"],
 )
+
 
 @router.post(
     "/",
@@ -17,16 +18,15 @@ router = APIRouter(
     summary="Criar uma nova tarefa",
 )
 def create_task(task_data: TaskCreate, db: Session = Depends(get_db)):
-    
-    db_task = Task(
-        title=task_data.title,
-        description=task_data.description,
-        priority=task_data.priority,
-    )
-    db.add(db_task)
-    db.commit()
-    db.refresh(db_task)
-    return db_task
+    """
+    Cria uma nova tarefa com os dados fornecidos.
+
+    - **title**: Título da tarefa (obrigatório)
+    - **description**: Descrição detalhada (opcional)
+    - **priority**: Prioridade — low, medium ou high (padrão: medium)
+    """
+    service = TaskService(db)
+    return service.create(task_data)
 
 
 @router.get(
@@ -39,9 +39,14 @@ def list_tasks(
     limit: int = 10,
     db: Session = Depends(get_db),
 ):
-    
-    tasks = db.query(Task).offset(skip).limit(limit).all()
-    return tasks
+    """
+    Retorna a lista de tarefas com paginação.
+
+    - **skip**: Quantos registros pular (padrão: 0)
+    - **limit**: Quantos registros retornar (padrão: 10)
+    """
+    service = TaskService(db)
+    return service.get_all(skip, limit)
 
 
 @router.get(
@@ -50,16 +55,13 @@ def list_tasks(
     summary="Buscar tarefa por ID",
 )
 def get_task(task_id: int, db: Session = Depends(get_db)):
-    
-    db_task = db.query(Task).filter(Task.id == task_id).first()
+    """
+    Retorna uma tarefa específica pelo ID.
 
-    if not db_task:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Tarefa com id {task_id} não encontrada",
-        )
-
-    return db_task
+    - **task_id**: ID da tarefa
+    """
+    service = TaskService(db)
+    return service.get_by_id(task_id)
 
 
 @router.put(
@@ -72,23 +74,27 @@ def update_task(
     task_data: TaskUpdate,
     db: Session = Depends(get_db),
 ):
-   
-    db_task = db.query(Task).filter(Task.id == task_id).first()
+    """
+    Atualiza os dados de uma tarefa existente.
 
-    if not db_task:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Tarefa com id {task_id} não encontrada",
-        )
+    - **task_id**: ID da tarefa a ser atualizada
+    - Envie apenas os campos que deseja alterar
+    """
+    service = TaskService(db)
+    return service.update(task_id, task_data)
 
-    # Pega apenas os campos que foram enviados pelo usuário
-    updated_fields = task_data.model_dump(exclude_unset=True)
 
-    # Atualiza apenas os campos recebidos
-    for field, value in updated_fields.items():
-        setattr(db_task, field, value)
+@router.delete(
+    "/{task_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Deletar uma tarefa",
+)
+def delete_task(task_id: int, db: Session = Depends(get_db)):
+    """
+    Remove uma tarefa permanentemente.
 
-    db.commit()
-    db.refresh(db_task)
-
-    return db_task
+    - **task_id**: ID da tarefa a ser removida
+    """
+    service = TaskService(db)
+    service.delete(task_id)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
