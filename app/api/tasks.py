@@ -1,7 +1,8 @@
-from fastapi import APIRouter, Depends, status, Response
+from fastapi import APIRouter, Depends, Query, status, Response
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 from app.core.database import get_db
+from app.models.task import Priority
 from app.schemas.task import TaskCreate, TaskUpdate, TaskResponse
 from app.services.task_service import TaskService
 
@@ -35,18 +36,23 @@ def create_task(task_data: TaskCreate, db: Session = Depends(get_db)):
     summary="Listar todas as tarefas",
 )
 def list_tasks(
-    skip: int = 0,
-    limit: int = 10,
+    # SECURITY: ge=0 evita skip negativo; le=100 previne DoS com limit=9999999
+    skip: int = Query(default=0, ge=0, description="Registros a pular"),
+    limit: int = Query(default=10, ge=1, le=100, description="Máximo de registros (1–100)"),
+    completed: Optional[bool] = Query(default=None, description="Filtrar por status de conclusão"),
+    priority: Optional[Priority] = Query(default=None, description="Filtrar por prioridade"),
     db: Session = Depends(get_db),
 ):
     """
-    Retorna a lista de tarefas com paginação.
+    Retorna a lista de tarefas com paginação e filtros opcionais.
 
-    - **skip**: Quantos registros pular (padrão: 0)
-    - **limit**: Quantos registros retornar (padrão: 10)
+    - **skip**: Quantos registros pular (padrão: 0, mínimo: 0)
+    - **limit**: Quantos registros retornar (padrão: 10, máximo: 100)
+    - **completed**: Filtrar por concluído (true/false)
+    - **priority**: Filtrar por prioridade (low/medium/high)
     """
     service = TaskService(db)
-    return service.get_all(skip, limit)
+    return service.get_all(skip, limit, completed=completed, priority=priority)
 
 
 @router.get(

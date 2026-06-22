@@ -19,6 +19,7 @@ def create_task_in_db(client, **kwargs) -> dict:
     """Helper — cria uma tarefa e retorna o JSON."""
     payload = create_task_payload(**kwargs)
     response = client.post("/tasks/", json=payload)
+    assert response.status_code == status.HTTP_201_CREATED, response.text
     return response.json()
 
 
@@ -108,6 +109,40 @@ class TestReadTask:
 
         assert response.status_code == status.HTTP_200_OK
         assert len(response.json()) == 2
+
+    def test_list_tasks_limit_above_max_fails(self, client):
+        """Deve rejeitar limit acima de 100 (proteção contra DoS)."""
+        response = client.get("/tasks/?limit=101")
+
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+    def test_list_tasks_negative_skip_fails(self, client):
+        """Deve rejeitar skip negativo."""
+        response = client.get("/tasks/?skip=-1")
+
+        assert response.status_code == status.HTTP_422_UNPROCESSABLE_ENTITY
+
+    def test_list_tasks_filter_by_completed(self, client):
+        """Deve filtrar tarefas por status de conclusão."""
+        t = create_task_in_db(client, title="Pendente")
+        client.put(f"/tasks/{t['id']}", json={"completed": True})
+        create_task_in_db(client, title="Concluída")
+
+        response = client.get("/tasks/?completed=false")
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert all(not t["completed"] for t in data)
+
+    def test_list_tasks_filter_by_priority(self, client):
+        """Deve filtrar tarefas por prioridade."""
+        create_task_in_db(client, title="Alta", priority="high")
+        create_task_in_db(client, title="Baixa", priority="low")
+
+        response = client.get("/tasks/?priority=high")
+        assert response.status_code == status.HTTP_200_OK
+        data = response.json()
+        assert len(data) == 1
+        assert data[0]["priority"] == "high"
 
     def test_get_task_by_id_success(self, client):
         """Deve retornar tarefa pelo ID."""
@@ -202,3 +237,20 @@ class TestDeleteTask:
         response = client.delete("/tasks/999")
 
         assert response.status_code == status.HTTP_404_NOT_FOUND
+
+
+# ─── TESTES DE HEALTH ─────────────────────────────────────────────
+
+class TestHealthCheck:
+
+    def test_root_returns_welcome(self, client):
+        """Deve retornar mensagem de boas-vindas."""
+        response = client.get("/")
+        assert response.status_code == status.HTTP_200_OK
+        assert "message" in response.json()
+
+    def test_health_endpoint(self, client):
+        """Deve retornar status ok."""
+        response = client.get("/health")
+        assert response.status_code == status.HTTP_200_OK
+        assert response.json()["status"] == "ok"

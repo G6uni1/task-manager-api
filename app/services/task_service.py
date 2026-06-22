@@ -1,5 +1,6 @@
+from typing import Optional
 from sqlalchemy.orm import Session
-from app.models.task import Task
+from app.models.task import Task, Priority
 from app.schemas.task import TaskCreate, TaskUpdate
 from app.core.exceptions import NotFoundException
 
@@ -21,9 +22,23 @@ class TaskService:
         self.db.refresh(db_task)
         return db_task
 
-    def get_all(self, skip: int = 0, limit: int = 10) -> list[Task]:
-        """Retorna todas as tarefas com paginação."""
-        return self.db.query(Task).offset(skip).limit(limit).all()
+    def get_all(
+        self,
+        skip: int = 0,
+        limit: int = 10,
+        completed: Optional[bool] = None,
+        priority: Optional[Priority] = None,
+    ) -> list[Task]:
+        """Retorna tarefas com paginação e filtros opcionais."""
+        query = self.db.query(Task)
+
+        if completed is not None:
+            query = query.filter(Task.completed == completed)
+
+        if priority is not None:
+            query = query.filter(Task.priority == priority)
+
+        return query.offset(skip).limit(limit).all()
 
     def get_by_id(self, task_id: int) -> Task:
         """Busca uma tarefa pelo ID ou lança NotFoundException."""

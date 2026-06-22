@@ -29,12 +29,18 @@ class Task(Base, TimestampMixin):
 
     completed: Mapped[bool] = mapped_column(
         Boolean,
+        # server_default garante o padrão mesmo em INSERTs via SQL puro,
+        # enquanto default cobre INSERTs feitos pelo SQLAlchemy
         default=False,
+        server_default="false",
         nullable=False,
     )
 
     priority: Mapped[Priority] = mapped_column(
-        SAEnum(Priority),
+        # create_type=False: o tipo enum já é criado pela migration do Alembic;
+        # sem isso o SQLAlchemy tenta criar novamente e lança ProgrammingError
+        SAEnum(Priority, name="priority", create_type=False),
         default=Priority.medium,
+        server_default=Priority.medium.value,
         nullable=False,
     )
