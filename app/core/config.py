@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     DEBUG: bool = True
 
     DATABASE_URL: str = "postgresql://postgres:postgres123@localhost:5432/taskmanager"
+    TEST_DATABASE_URL: str = "postgresql://postgres:postgres123@localhost:5432/taskmanager_test"  # adicione isso
 
     model_config = SettingsConfigDict(
         env_file=".env",

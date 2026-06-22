@@ -7,9 +7,8 @@ from app.api.errors import (
     generic_exception_handler,
 )
 from app.core.config import settings
-from app.core.database import Base, engine
 from app.core.exceptions import AppException
-from app.models import Task
+
 
 app = FastAPI(
     title=settings.APP_NAME,
