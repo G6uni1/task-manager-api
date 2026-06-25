@@ -18,25 +18,33 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # Cria o enum de prioridade
-    priority_enum = sa.Enum('low', 'medium', 'high', name='priority')
-    priority_enum.create(op.get_bind(), checkfirst=True)
+    # Cria o enum apenas se não existir
+    op.execute("""
+        DO $$ BEGIN
+            CREATE TYPE priority AS ENUM ('low', 'medium', 'high');
+        EXCEPTION
+            WHEN duplicate_object THEN null;
+        END $$;
+    """)
 
-    # Cria a tabela tasks
-    op.create_table(
-        'tasks',
-        sa.Column('id', sa.Integer(), nullable=False),
-        sa.Column('title', sa.String(length=255), nullable=False),
-        sa.Column('description', sa.Text(), nullable=True),
-        sa.Column('completed', sa.Boolean(), nullable=False, server_default='false'),
-        sa.Column('priority', sa.Enum('low', 'medium', 'high', name='priority'), nullable=False, server_default='medium'),
-        sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
-        sa.PrimaryKeyConstraint('id'),
-    )
-    op.create_index(op.f('ix_tasks_id'), 'tasks', ['id'], unique=False)
+    # Cria a tabela apenas se não existir
+    op.execute("""
+        CREATE TABLE IF NOT EXISTS tasks (
+            id SERIAL NOT NULL,
+            title VARCHAR(255) NOT NULL,
+            description TEXT,
+            completed BOOLEAN NOT NULL DEFAULT false,
+            priority priority NOT NULL DEFAULT 'medium',
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+            PRIMARY KEY (id)
+        );
+    """)
 
-    # Trigger para atualizar updated_at automaticamente no banco
+    op.execute("""
+        CREATE INDEX IF NOT EXISTS ix_tasks_id ON tasks (id);
+    """)
+
     op.execute("""
         CREATE OR REPLACE FUNCTION update_updated_at_column()
         RETURNS TRIGGER AS $$
@@ -48,6 +56,7 @@ def upgrade() -> None:
     """)
 
     op.execute("""
+        DROP TRIGGER IF EXISTS tasks_updated_at ON tasks;
         CREATE TRIGGER tasks_updated_at
         BEFORE UPDATE ON tasks
         FOR EACH ROW
